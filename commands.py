@@ -24,18 +24,6 @@ logger = logging.getLogger(__name__)
 # State untuk ConversationHandler (untuk fitur /settings)
 (SELECTING_ACTION, AWAITING_WELCOME_MESSAGE, AWAITING_RULES) = range(3)
 
-# --- Daftar Mutiara Kata Islami ---
-ISLAMIC_QUOTES = [
-    {"author": "Imam Al-Ghazali", "quote": "Kebahagiaan terletak pada kemenangan memerangi hawa nafsu dan menahan kehendak yang berlebih-lebihan."},
-    {"author": "Imam Syafi'i", "quote": "Ilmu itu bukan yang dihafal, tetapi yang memberi manfaat."},
-    {"author": "Umar bin Khattab", "quote": "Aku tidak pernah mengkhawatirkan apakah doaku akan dikabulkan atau tidak, tapi yang lebih aku khawatirkan adalah aku tidak diberi hidayah untuk terus berdoa."},
-    {"author": "Ali bin Abi Thalib", "quote": "Jangan menjelaskan tentang dirimu kepada siapa pun, karena yang menyukaimu tidak butuh itu dan yang membencimu tidak percaya itu."},
-    {"author": "Hasan Al-Bashri", "quote": "Dunia ini hanya tiga hari: Kemarin, ia telah pergi bersama dengan semua isinya. Besok, engkau mungkin tak akan pernah menemuinya. Hari ini, itulah yang kau punya, maka beramallah di hari ini."},
-    {"author": "Ibnu Qayyim Al-Jauziyyah", "quote": "Jika Allah memberimu nikmat, Dia ingin melihat jejak nikmat-Nya ada padamu."},
-    {"author": "Imam Al-Ghazali", "quote": "Cintailah kekasihmu sekadarnya saja, siapa tahu nanti akan jadi musuhmu. Dan bencilah musuhmu sekadarnya saja, siapa tahu nanti akan jadi kekasihmu."},
-    {"author": "Ali bin Abi Thalib", "quote": "Kesabaran itu ada dua macam: sabar atas sesuatu yang tidak kau ingin dan sabar menahan diri dari sesuatu yang kau ingini."}
-]
-
 # --- Fungsi Helper Moderasi ---
 
 async def is_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -177,14 +165,34 @@ async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
 
 async def mutiarakata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Mengirim sebuah mutiara kata Islami secara acak dari API."""
     if not update.message: return
-    quote_data = random.choice(ISLAMIC_QUOTES)
-    message_text = (
-        f"✨ <b>Mutiara Kata</b> ✨\n\n"
-        f"<i>\"{quote_data['quote']}\"</i>\n\n"
-        f"<b>— {quote_data['author']}</b>"
-    )
-    await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
+    
+    processing_message = await update.message.reply_text("✨ Sedang mencari mutiara kata...")
+    try:
+        # Menggunakan API dari GitHub yang berisi banyak kutipan
+        url = "https://raw.githubusercontent.com/wh-iterabb-it/isl-api/main/data/quotes.json"
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        quotes_list = response.json()
+
+        if not isinstance(quotes_list, list) or not quotes_list:
+            raise ValueError("Format data dari API tidak valid atau kosong.")
+
+        quote_data = random.choice(quotes_list)
+        
+        message_text = (
+            f"✨ <b>Mutiara Kata</b> ✨\n\n"
+            f"<i>\"{quote_data.get('quote', '...')}\"</i>\n\n"
+            f"<b>— {quote_data.get('author', 'Anonim')}</b>"
+        )
+        await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
+    except (requests.exceptions.RequestException, ValueError, json.JSONDecodeError) as e:
+        logger.error(f"Error saat mengambil Mutiara Kata dari API: {e}")
+        await update.message.reply_text("Maaf, terjadi kesalahan saat mencari mutiara kata. Coba lagi nanti.")
+    finally:
+        await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
+
 
 async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message: return
