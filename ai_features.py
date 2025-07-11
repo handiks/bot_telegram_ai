@@ -14,7 +14,8 @@ from telegram.error import Forbidden
 
 # Mengimpor fungsi dari file lain
 import db_handler
-from commands import issue_warning # <-- Impor fungsi peringatan yang baru
+# REVISI: Impor 'issue_warning' dipindahkan ke dalam fungsi untuk menghindari circular import.
+# from commands import issue_warning # <-- Baris ini dihapus dari sini
 
 # Inisialisasi logger
 logger = logging.getLogger(__name__)
@@ -47,6 +48,9 @@ async def moderate_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """
     Menganalisis pesan grup menggunakan AI dan memberikan peringatan jika perlu.
     """
+    # REVISI: Impor dipindahkan ke sini.
+    from commands import issue_warning 
+
     if not gemini_model or not update.message or not update.message.text:
         return
 
@@ -100,8 +104,7 @@ async def moderate_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             except Exception as e:
                 logger.error(f"Error saat menghapus pesan: {e}")
 
-            # 2. REVISI: Berikan peringatan resmi menggunakan sistem /warn
-            # Pesan peringatan akan dikirim oleh fungsi issue_warning
+            # 2. Berikan peringatan resmi menggunakan sistem /warn
             await issue_warning(
                 context=context,
                 chat_id=update.effective_chat.id,
