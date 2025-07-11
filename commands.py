@@ -2,7 +2,7 @@
 
 """
 Modul ini berisi semua fungsi dasar yang dipanggil oleh pengguna melalui perintah.
-Termasuk fitur Mutiara Kata Islami yang baru.
+Termasuk fitur Mutiara Kata Islami.
 """
 
 import logging
@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 (SELECTING_ACTION, AWAITING_WELCOME_MESSAGE, AWAITING_RULES) = range(3)
 
 # --- Daftar Mutiara Kata Islami ---
-# Data disimpan di sini agar tidak bergantung pada API eksternal
 ISLAMIC_QUOTES = [
     {"author": "Imam Al-Ghazali", "quote": "Kebahagiaan terletak pada kemenangan memerangi hawa nafsu dan menahan kehendak yang berlebih-lebihan."},
     {"author": "Imam Syafi'i", "quote": "Ilmu itu bukan yang dihafal, tetapi yang memberi manfaat."},
@@ -50,7 +49,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(welcome_message)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menampilkan daftar semua perintah yang tersedia."""
     if not update.message: return
     help_text = (
         "📖 <b>Daftar Perintah Bot</b>\n\n"
@@ -120,11 +118,11 @@ async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     finally:
         await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
 
-# --- FITUR BARU: Mutiara Kata Islami ---
 async def mutiarakata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Mengirim sebuah mutiara kata Islami secara acak."""
     if not update.message: return
-
+    
+    logger.info(f"Perintah /mutiarakata dieksekusi oleh {update.effective_user.name}")
     quote_data = random.choice(ISLAMIC_QUOTES)
     
     message_text = (
@@ -133,9 +131,6 @@ async def mutiarakata_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"<b>— {quote_data['author']}</b>"
     )
     await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
-
-# ... (Sisa kode untuk tanya_ai, kisah, hadith, reminder, greet_new_member, dan settings tetap sama)
-# Pastikan semua fungsi lainnya tetap ada di sini.
 
 async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message: return
