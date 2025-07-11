@@ -11,7 +11,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-# Mengimpor model AI dari file terpisah. Ini sudah benar.
+# Mengimpor model AI dari file terpisah.
 from ai_features import gemini_model
 
 # Inisialisasi logger
