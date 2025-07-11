@@ -2,7 +2,7 @@
 
 """
 File utama untuk menjalankan bot Telegram Islami & Manajemen Grup.
-Versi ini berjalan 24/7 dan mendukung fitur pengaturan dan Asmaul Husna.
+Versi ini berjalan 24/7 dan mendukung fitur pengaturan dan Mutiara Kata.
 """
 
 import logging
@@ -26,7 +26,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Mengimpor semua fungsi dari modul fitur.
 from commands import (
-    start, help_command, rules, statistic, doa_harian_command, asmaulhusna_command,
+    start, help_command, rules, statistic, doa_harian_command, mutiarakata_command,
     tanya_ai_command, kisah_command, hadith_command, set_reminder, 
     greet_new_member,
     # Impor untuk settings
@@ -71,8 +71,19 @@ def run_keep_alive_server():
 
 # --- Fungsi Penangan Error ---
 async def error_handler(update: Optional[object], context: ContextTypes.DEFAULT_TYPE) -> None:
-    # ... (kode fungsi error_handler tetap sama)
-    pass
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+    tb_string = "".join(tb_list)
+    update_str = update.to_dict() if isinstance(update, Update) else str(update)
+    message = (
+        f"Terjadi exception:\n<pre>update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}</pre>\n\n"
+        f"<pre>{html.escape(tb_string)}</pre>"
+    )
+    if DEVELOPER_CHAT_ID:
+        try:
+            await context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logger.error(f"Gagal mengirim notifikasi error ke developer: {e}")
 
 # --- Fungsi Inisialisasi Bot ---
 async def post_init(application: Application) -> None:
@@ -82,7 +93,7 @@ async def post_init(application: Application) -> None:
     except Exception as e:
         logger.error(f"Gagal mereset webhook: {e}")
 
-    # REVISI: Menambahkan /asmaulhusna ke daftar menu
+    # REVISI: Mengganti /asmaulhusna dengan /mutiarakata
     commands = [
         BotCommand("start", "Memulai bot"),
         BotCommand("help", "Menampilkan bantuan"),
@@ -90,7 +101,7 @@ async def post_init(application: Application) -> None:
         BotCommand("settings", "(Admin) Atur bot untuk grup ini"),
         BotCommand("statistic", "Statistik grup"),
         BotCommand("doa", "Doa harian acak"),
-        BotCommand("asmaulhusna", "Menampilkan Asmaul Husna acak"),
+        BotCommand("mutiarakata", "Mutiara kata dari para ulama"),
         BotCommand("ayat", "Cari ayat Al-Qur'an (contoh: /ayat 1:5)"),
         BotCommand("tafsir", "Cari tafsir ayat (contoh: /tafsir 1:5)"),
         BotCommand("hadits", "Cari hadits (contoh: /hadits bukhari 52)"),
@@ -129,7 +140,7 @@ def main() -> None:
     application.add_handler(CommandHandler("rules", rules))
     application.add_handler(CommandHandler("statistic", statistic))
     application.add_handler(CommandHandler("doa", doa_harian_command))
-    application.add_handler(CommandHandler("asmaulhusna", asmaulhusna_command)) # <-- BARU
+    application.add_handler(CommandHandler("mutiarakata", mutiarakata_command)) # <-- BARU
     application.add_handler(CommandHandler("ingatkan", set_reminder))
     application.add_handler(CommandHandler("ayat", send_verse_command))
     application.add_handler(CommandHandler("tafsir", send_tafsir_command))
@@ -143,7 +154,14 @@ def main() -> None:
 
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, greet_new_member))
 
-    # ... (kode job_queue dan application.run_polling() tetap sama)
+    # Atur jadwal pengiriman otomatis jika TARGET_GROUP_ID tersedia
+    if TARGET_GROUP_ID and application.job_queue:
+        wib = datetime.timezone(datetime.timedelta(hours=7))
+        time_morning = datetime.time(hour=5, minute=0, tzinfo=wib)
+        application.job_queue.run_daily(send_daily_verse, time_morning, name="daily_morning_verse")
+        time_afternoon = datetime.time(hour=16, minute=0, tzinfo=wib)
+        application.job_queue.run_daily(send_daily_verse, time_afternoon, name="daily_afternoon_verse")
+        logger.info(f"Jadwal pengiriman ayat harian telah diatur.")
     
     logger.info("Bot mulai berjalan...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
