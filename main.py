@@ -2,8 +2,7 @@
 
 """
 File utama untuk menjalankan bot Telegram Islami & Manajemen Grup.
-Versi ini telah direfaktor untuk memisahkan logika fitur ke dalam modul terpisah
-dan ditambahkan fitur jadwal aktif untuk menghemat sumber daya.
+Versi ini telah direvisi untuk meningkatkan stabilitas di platform hosting seperti Railway.
 """
 
 import logging
@@ -21,7 +20,7 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 
-# Import untuk server web agar bot tetap aktif di platform seperti Replit.
+# Import untuk server web agar bot tetap aktif.
 from threading import Thread
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -32,7 +31,7 @@ from commands import (
     greet_new_member
 )
 from quran_features import send_verse_command, send_tafsir_command, send_daily_verse
-from ai_features import moderate_chat, gemini_model # Import gemini_model untuk pengecekan
+from ai_features import moderate_chat, gemini_model
 
 # --- Konfigurasi Logging ---
 logging.basicConfig(
@@ -51,71 +50,47 @@ except KeyError:
 DEVELOPER_CHAT_ID = os.environ.get('DEVELOPER_CHAT_ID')
 TARGET_GROUP_ID = os.environ.get('TARGET_GROUP_ID')
 
-if not TARGET_GROUP_ID:
-    logger.warning("TARGET_GROUP_ID tidak ditemukan. Pengiriman pesan terjadwal tidak akan berfungsi.")
-if not gemini_model:
-    logger.warning("Fitur AI tidak aktif karena model gagal diinisialisasi (cek GEMINI_API_KEY).")
-
 # --- Penjadwalan Aktivitas Bot ---
-
-# Tentukan zona waktu WIB (UTC+7)
 wib = datetime.timezone(datetime.timedelta(hours=7))
 
 class IsActiveFilter(filters.BaseFilter):
-    """Filter kustom untuk memeriksa apakah bot sedang dalam jam aktif."""
-    def __init__(self):
-        super().__init__(name='IsActiveFilter')
-
     def filter(self, update: Update) -> bool:
-        # Mengambil status dari bot_data. Jika kunci tidak ada, anggap tidak aktif.
         return update.get_bot().bot_data.get('is_active', False)
 
 async def activate_bot(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengaktifkan bot pada jam 7 pagi WIB."""
     context.bot_data['is_active'] = True
-    logger.info("Bot diaktifkan sesuai jadwal. Siap menerima perintah.")
-    if DEVELOPER_CHAT_ID:
-        try:
-            await context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text="✅ Bot sekarang AKTIF (07:00 WIB).")
-        except Exception as e:
-            logger.warning(f"Gagal mengirim notifikasi aktif ke developer: {e}")
+    logger.info("Bot diaktifkan sesuai jadwal (07:00 WIB).")
 
 async def deactivate_bot(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menonaktifkan bot pada jam 12 malam WIB."""
     context.bot_data['is_active'] = False
-    logger.info("Bot dinonaktifkan sesuai jadwal. Masuk mode tidur.")
-    if DEVELOPER_CHAT_ID:
-        try:
-            await context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text="🌙 Bot sekarang NONAKTIF (00:00 WIB).")
-        except Exception as e:
-            logger.warning(f"Gagal mengirim notifikasi nonaktif ke developer: {e}")
+    logger.info("Bot dinonaktifkan sesuai jadwal (00:00 WIB).")
 
-# --- Perintah Khusus Developer ---
-async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Perintah khusus untuk developer memeriksa status bot."""
-    if not update.effective_user or str(update.effective_user.id) != DEVELOPER_CHAT_ID:
-        return  # Abaikan jika bukan developer
-
-    is_active = context.bot_data.get('is_active', False)
-    status_text = (
-        f"<b>Bot Status Check</b>\n\n"
-        f"<b>Status:</b> {'✅ Aktif' if is_active else '🌙 Tidur'}\n"
-        f"<b>Waktu Server (WIB):</b> {datetime.datetime.now(wib).strftime('%Y-%m-%d %H:%M:%S')}"
-    )
-    await update.message.reply_text(status_text)
-
-# --- Bagian Server Keep-Alive ---
+# --- Bagian Server Keep-Alive dengan Logging ---
 class KeepAliveHandler(BaseHTTPRequestHandler):
+    """Handler untuk merespons permintaan HTTP dan menjaga bot tetap aktif."""
     def do_GET(self):
+        # REVISI: Menambahkan logging untuk memastikan Railway melakukan ping.
+        logger.info(f"Keep-alive server menerima permintaan GET dari {self.client_address[0]}")
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
-        self.wfile.write(b"Bot is running.")
+        self.wfile.write(b"Bot is running and active.")
+    
+    def log_message(self, format, *args):
+        # Mencegah logging HTTP default yang berlebihan ke konsol.
+        return
 
 def run_keep_alive_server():
+    """Menjalankan server HTTP di thread terpisah dengan pesan instruksional."""
     server_address = ('0.0.0.0', 8080)
     httpd = HTTPServer(server_address, KeepAliveHandler)
-    logger.info("Keep-alive server dimulai pada port 8080.")
+    # REVISI: Menambahkan pesan yang lebih jelas di log untuk membantu konfigurasi.
+    logger.info("================================================================")
+    logger.info("Server Keep-Alive dimulai pada port 8080.")
+    logger.info("PASTIKAN di pengaturan Railway, Anda telah mengatur:")
+    logger.info("1. Healthcheck untuk path '/' pada port 8080.")
+    logger.info("2. Port 8080 diekspos ke publik (Expose Port).")
+    logger.info("================================================================")
     httpd.serve_forever()
 
 # --- Fungsi Penangan Error ---
@@ -160,6 +135,7 @@ async def post_init(application: Application) -> None:
 
 def main() -> None:
     """Fungsi utama untuk mengatur dan menjalankan bot."""
+    logger.info("Memulai fungsi main(). Menginisialisasi bot...")
     keep_alive_thread = Thread(target=run_keep_alive_server, daemon=True)
     keep_alive_thread.start()
 
@@ -177,20 +153,10 @@ def main() -> None:
         application.job_queue.run_daily(activate_bot, time=datetime.time(hour=7, minute=0, tzinfo=wib), name="activate_bot")
         logger.info("Jadwal aktivasi (07:00 WIB) dan deaktivasi (00:00 WIB) telah diatur.")
     
-    if TARGET_GROUP_ID and application.job_queue:
-        time_afternoon = datetime.time(hour=16, minute=0, tzinfo=wib)
-        application.job_queue.run_daily(send_daily_verse, time_afternoon, name="daily_afternoon_verse")
-        logger.info(f"Jadwal pengiriman ayat harian sore telah diatur.")
-
     is_active_filter = IsActiveFilter()
     application.add_error_handler(error_handler)
 
-    # --- Pendaftaran Handler ---
-    # Perintah khusus developer (tanpa filter aktif)
-    if DEVELOPER_CHAT_ID:
-        application.add_handler(CommandHandler("status", status_command))
-
-    # Perintah dan pesan untuk pengguna (dengan filter aktif)
+    # Pendaftaran handler dengan filter
     application.add_handler(CommandHandler("start", start, filters=is_active_filter))
     application.add_handler(CommandHandler("help", help_command, filters=is_active_filter))
     application.add_handler(CommandHandler("rules", rules, filters=is_active_filter))
@@ -200,17 +166,16 @@ def main() -> None:
     application.add_handler(CommandHandler("ayat", send_verse_command, filters=is_active_filter))
     application.add_handler(CommandHandler("tafsir", send_tafsir_command, filters=is_active_filter))
     application.add_handler(CommandHandler("hadits", hadith_command, filters=is_active_filter))
-    
+
     if gemini_model:
         application.add_handler(CommandHandler("tanya", tanya_ai_command, filters=is_active_filter))
         application.add_handler(CommandHandler("kisah", kisah_command, filters=is_active_filter))
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & is_active_filter, moderate_chat))
-        logger.info("Handler untuk fitur AI telah aktif dan terikat pada jadwal.")
-
-    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS & is_active_filter, greet_new_member))
-
+    
     logger.info("Bot mulai berjalan...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
+    
+    logger.info("Aplikasi telah berhenti. Keluar dari main().")
 
 if __name__ == "__main__":
     main()
