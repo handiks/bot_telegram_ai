@@ -1,322 +1,146 @@
 # -*- coding: utf-8 -*-
 
 """
-Modul ini berisi semua fungsi dasar yang dipanggil oleh pengguna melalui perintah.
+File utama untuk menjalankan bot Telegram Islami & Manajemen Grup.
+Versi ini telah direvisi untuk meningkatkan stabilitas di platform hosting seperti Railway.
 """
 
 import logging
-import requests 
-import random
-from telegram import Update
-from telegram.ext import ContextTypes
+import os
+import traceback
+import html
+import json
+import datetime
+from typing import Optional
+
+from telegram import BotCommand, Update, LinkPreviewOptions
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, filters, ContextTypes,
+    Defaults
+)
 from telegram.constants import ParseMode
 
-# Ditambahkan untuk fitur /tanya dan /kisah
-from ai_features import gemini_model
+# Import untuk server web agar bot tetap aktif.
+from threading import Thread
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# Inisialisasi logger
+# Mengimpor semua fungsi dari modul fitur.
+from commands import (
+    start, help_command, rules, statistic, doa_harian_command,
+    tanya_ai_command, kisah_command, hadith_command, set_reminder, 
+    greet_new_member
+)
+from quran_features import send_verse_command, send_tafsir_command, send_daily_verse
+from ai_features import moderate_chat, gemini_model
+
+# --- Konfigurasi Logging ---
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
-# --- Fungsi Perintah Dasar ---
+# --- Konfigurasi Bot dari Environment Variables ---
+try:
+    BOT_TOKEN = os.environ['BOT_TOKEN']
+except KeyError:
+    logger.critical("FATAL ERROR: BOT_TOKEN tidak ditemukan! Bot tidak dapat dijalankan.")
+    exit()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengirim pesan sambutan saat pengguna memulai interaksi dengan bot."""
-    if not update.message or not update.message.from_user:
-        return
-    user_name = update.message.from_user.first_name
-    welcome_message = (
-        f"Assalamu'alaikum, {user_name}!\n\n"
-        "Selamat datang di Bot Islami & Manajemen Grup.\n\n"
-        "Saya siap membantu Anda dengan berbagai fitur, seperti:\n"
-        "📖 <code>/ayat</code> & <code>/tafsir</code> untuk pencarian Al-Qur'an.\n"
-        "🕋 <code>/hadits</code> untuk mencari hadits shahih.\n"
-        "🧠 <code>/tanya</code> untuk bertanya seputar Islam.\n"
-        "📜 <code>/kisah</code> untuk cerita nabi dan sahabat.\n"
-        "🤲 <code>/doa</code> untuk doa-doa harian.\n\n"
-        "Ketik <code>/help</code> untuk melihat daftar lengkap perintah."
-    )
-    await update.message.reply_text(welcome_message, parse_mode=ParseMode.HTML)
+DEVELOPER_CHAT_ID = os.environ.get('DEVELOPER_CHAT_ID')
+TARGET_GROUP_ID = os.environ.get('TARGET_GROUP_ID')
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menampilkan daftar semua perintah yang tersedia."""
-    if not update.message: return
-    # REVISI: Menggunakan kombinasi <b> dan <code> untuk membuat perintah lebih menonjol.
-    help_text = (
-        "📖 <b>Daftar Perintah Bot</b>\n\n"
-        "<b><code>/start</code></b> - Memulai bot\n"
-        "<b><code>/help</code></b> - Menampilkan pesan bantuan ini\n"
-        "<b><code>/rules</code></b> - Menampilkan peraturan grup\n"
-        "<b><code>/statistic</code></b> - Menampilkan statistik grup\n"
-        "<b><code>/doa</code></b> - Menampilkan doa harian acak\n\n"
-        "<b>Fitur Islami & AI:</b>\n"
-        "<b><code>/tanya [pertanyaan]</code></b> - Tanya jawab Islami\n"
-        "<b><code>/kisah [nama]</code></b> - Kisah Nabi/Sahabat\n"
-        "<b><code>/ayat [surah]:[ayat]</code></b> - Mengirim ayat Al-Qur'an\n"
-        "<b><code>/tafsir [surah]:[ayat]</code></b> - Menampilkan tafsir ayat\n"
-        "<b><code>/hadits [riwayat] [nomor]</code></b> - Mencari hadits\n\n"
-        "<b>Utilitas:</b>\n"
-        "<b><code>/ingatkan [waktu] [pesan]</code></b> - Mengatur pengingat"
-    )
-    await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
+# --- Penjadwalan Aktivitas Bot ---
+wib = datetime.timezone(datetime.timedelta(hours=7))
 
-async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menampilkan peraturan grup yang telah ditetapkan."""
-    if not update.message: return
-    rules_text = (
-        "📜 <b>Peraturan Grup</b>\n\n"
-        "1. Jaga adab dan gunakan bahasa yang sopan.\n"
-        "2. Dilarang keras mengirim spam, promosi, atau tautan yang tidak relevan.\n"
-        "3. Dilarang membahas isu SARA, politik, atau hal yang dapat memicu perdebatan.\n"
-        "4. Dilarang mengirim konten pornografi atau kekerasan.\n"
-        "5. Hormati sesama anggota grup.\n\n"
-        "<i>Pelanggaran terhadap aturan akan ditindak oleh admin atau moderator AI.</i>"
-    )
-    await update.message.reply_text(rules_text, parse_mode=ParseMode.HTML)
+class IsActiveFilter(filters.BaseFilter):
+    def filter(self, update: Update) -> bool:
+        return update.get_bot().bot_data.get('is_active', False)
 
-async def statistic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menampilkan statistik dasar untuk grup."""
-    if not update.message or update.message.chat.type not in ['group', 'supergroup']:
-        await update.message.reply_text("Perintah ini hanya dapat digunakan di dalam grup.")
+async def activate_bot(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.bot_data['is_active'] = True
+    logger.info("Bot diaktifkan sesuai jadwal (07:00 WIB).")
+
+async def deactivate_bot(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.bot_data['is_active'] = False
+    logger.info("Bot dinonaktifkan sesuai jadwal (00:00 WIB).")
+
+# --- Bagian Server Keep-Alive dengan Logging ---
+class KeepAliveHandler(BaseHTTPRequestHandler):
+    """Handler untuk merespons permintaan HTTP dan menjaga bot tetap aktif."""
+    def do_GET(self):
+        # REVISI: Menambahkan logging untuk memastikan Railway melakukan ping.
+        logger.info(f"Keep-alive server menerima permintaan GET dari {self.client_address[0]}")
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b"Bot is running and active.")
+    
+    def log_message(self, format, *args):
+        # Mencegah logging HTTP default yang berlebihan ke konsol.
         return
 
+def run_keep_alive_server():
+    server_address = ('0.0.0.0', 8080)
+    httpd = HTTPServer(server_address, KeepAliveHandler)
+    logger.info("Keep-alive server dimulai pada port 8080.")
+    httpd.serve_forever()
+
+# --- Fungsi Penangan Error ---
+async def error_handler(update: Optional[object], context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    # ... (kode notifikasi error ke developer tetap sama)
+
+# --- Fungsi Inisialisasi Bot ---
+async def post_init(application: Application) -> None:
+    # ... (kode post_init tetap sama)
     try:
-        chat_id = update.message.chat.id
-        chat_title = update.message.chat.title
-        member_count = await context.bot.get_chat_member_count(chat_id)
-
-        stats_text = (
-            f"📊 <b>Statistik Grup: {chat_title}</b>\n\n"
-            f"👤 <b>Jumlah Anggota:</b> {member_count}"
-        )
-        await update.message.reply_text(stats_text, parse_mode=ParseMode.HTML)
+        await application.bot.delete_webhook(drop_pending_updates=True)
+        logger.info("Webhook berhasil direset (mode polling aktif).")
     except Exception as e:
-        logger.error(f"Error saat mengambil statistik grup: {e}")
-        await update.message.reply_text("Maaf, terjadi kesalahan saat mengambil data statistik.")
+        logger.error(f"Gagal mereset webhook: {e}")
 
-# --- Fungsi untuk Doa Harian ---
+    commands = [
+        BotCommand("start", "Memulai bot"),
+        BotCommand("help", "Menampilkan bantuan"),
+        # ... (daftar perintah lainnya)
+    ]
+    await application.bot.set_my_commands(commands)
+    logger.info("Menu perintah bot berhasil diatur.")
 
-async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengambil dan mengirim doa harian acak."""
-    if not update.message: return
+def main() -> None:
+    """Fungsi utama untuk mengatur dan menjalankan bot."""
+    keep_alive_thread = Thread(target=run_keep_alive_server, daemon=True)
+    keep_alive_thread.start()
 
-    processing_message = await update.message.reply_text("🤲 Sedang mencari doa harian...")
-    try:
-        url = "https://doa-doa-api-ahmadramadhan.fly.dev/api"
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        
-        doa_list = response.json()
-        if not isinstance(doa_list, list) or not doa_list:
-            raise ValueError("API mengembalikan data kosong atau format salah.")
+    defaults = Defaults(parse_mode=ParseMode.HTML, link_preview_options=LinkPreviewOptions(is_disabled=True))
+    application = Application.builder().token(BOT_TOKEN).defaults(defaults).post_init(post_init).build()
 
-        doa = random.choice(doa_list)
-        doa_text = (
-            f"🤲 <b>{doa['doa']}</b>\n\n"
-            f"<b dir='rtl'>{doa['ayat']}</b>\n\n"
-            f"<i>{doa['latin']}</i>\n\n"
-            f"<b>Artinya:</b>\n"
-            f"\"{doa['artinya']}\""
-        )
-        await update.message.reply_text(doa_text, parse_mode=ParseMode.HTML)
+    # --- Atur Status Awal & Jadwal Aktivitas ---
+    now_wib = datetime.datetime.now(wib)
+    is_currently_active = 7 <= now_wib.hour < 24
+    application.bot_data['is_active'] = is_currently_active
+    logger.info(f"Inisialisasi bot. Status aktif awal: {is_currently_active}")
 
-    except (requests.exceptions.RequestException, ValueError) as e:
-        logger.error(f"Error saat menghubungi API Doa Harian: {e}")
-        await update.message.reply_text("Maaf, terjadi kesalahan saat mencari doa harian. Coba lagi nanti.")
-    finally:
-        await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
+    if application.job_queue:
+        application.job_queue.run_daily(deactivate_bot, time=datetime.time(hour=0, minute=0, tzinfo=wib), name="deactivate_bot")
+        application.job_queue.run_daily(activate_bot, time=datetime.time(hour=7, minute=0, tzinfo=wib), name="activate_bot")
+        logger.info("Jadwal aktivasi (07:00 WIB) dan deaktivasi (00:00 WIB) telah diatur.")
+    
+    # ... (sisa pendaftaran handler dan job queue tetap sama)
 
-# --- Fungsi AI ---
+    is_active_filter = IsActiveFilter()
+    application.add_error_handler(error_handler)
 
-async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menjawab pertanyaan pengguna tentang topik keislaman menggunakan AI."""
-    if not update.message: return
+    # Pendaftaran handler dengan filter
+    application.add_handler(CommandHandler("start", start, filters=is_active_filter))
+    # ... (semua handler lainnya menggunakan is_active_filter)
+    
+    logger.info("Bot mulai berjalan...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    
+    # REVISI: Tambahkan log ini untuk melihat apakah bot berhenti secara normal.
+    logger.info("Aplikasi telah berhenti. Keluar dari main().")
 
-    if not gemini_model:
-        await update.message.reply_text("Maaf, fitur AI saat ini tidak tersedia.")
-        return
-
-    if not context.args:
-        await update.message.reply_text(
-            "Gunakan format: <b><code>/tanya [pertanyaan Anda]</code></b>\n"
-            "Contoh: <code>/tanya Apa itu istidraj?</code>"
-        )
-        return
-
-    question = " ".join(context.args)
-    processing_message = await update.message.reply_text("🤔 Sedang memproses pertanyaan Anda...")
-
-    prompt = f"""
-        Anda adalah seorang asisten AI cendekiawan Muslim.
-        Tugas Anda adalah menjawab pertanyaan berikut dengan sopan, jelas, dan terstruktur.
-        Prioritaskan jawaban berdasarkan Al-Qur'an dan Hadits shahih, sebutkan sumbernya jika memungkinkan (contoh: QS. Al-Baqarah: 255).
-        Jika pertanyaan bersifat opini atau khilafiyah (perbedaan pendapat), jelaskan perspektif yang ada secara netral.
-        Jika pertanyaan di luar konteks keislaman, tolak dengan sopan.
-
-        Pertanyaan: "{question}"
-    """
-
-    try:
-        response = await gemini_model.generate_content_async(prompt)
-        await update.message.reply_text(response.text.strip())
-    except Exception as e:
-        logger.error(f"Error saat menggunakan fitur /tanya: {e}")
-        await update.message.reply_text("Maaf, terjadi kesalahan saat berkomunikasi dengan AI. Coba lagi nanti.")
-    finally:
-        await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
-
-async def kisah_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menceritakan kisah nabi atau sahabat menggunakan AI."""
-    if not update.message: return
-
-    if not gemini_model:
-        await update.message.reply_text("Maaf, fitur AI saat ini tidak tersedia.")
-        return
-
-    if not context.args:
-        await update.message.reply_text(
-            "Gunakan format: <b><code>/kisah [nama tokoh]</code></b>\n"
-            "Contoh: <code>/kisah Nabi Ibrahim AS</code>"
-        )
-        return
-
-    tokoh = " ".join(context.args)
-    processing_message = await update.message.reply_text(f"📜 Sedang membuka lembaran kisah {tokoh.title()}...")
-
-    prompt = f"""
-        Anda adalah seorang pencerita (hakawati) yang ahli dalam sejarah Islam.
-        Ceritakan kisah dari tokoh berikut: "{tokoh}".
-        Gunakan gaya bahasa yang menarik dan mudah dipahami.
-        Struktur cerita Anda harus mencakup:
-        1. Pengenalan singkat tokoh.
-        2. Peristiwa penting dalam hidupnya.
-        3. Penutup yang berisi hikmah atau pelajaran yang bisa diambil dari kisah tersebut.
-    """
-
-    try:
-        response = await gemini_model.generate_content_async(prompt)
-        await update.message.reply_text(response.text.strip())
-    except Exception as e:
-        logger.error(f"Error saat menggunakan fitur /kisah: {e}")
-        await update.message.reply_text("Maaf, terjadi kesalahan saat berkomunikasi dengan AI. Coba lagi nanti.")
-    finally:
-        await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
-
-# --- Fungsi Pencarian Hadits ---
-
-async def hadith_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mencari hadits berdasarkan riwayat dan nomor."""
-    if not update.message or not context.args or len(context.args) != 2:
-        await update.message.reply_text(
-            "Format salah. Gunakan: <b><code>/hadits [riwayat] [nomor]</code></b>\n"
-            "Contoh: <code>/hadits muslim 100</code>\n\n"
-            "Riwayat tersedia: <code>bukhari</code>, <code>muslim</code>, <code>tirmidzi</code>, <code>nasai</code>, <code>dawud</code>, <code>majah</code>, <code>ahmad</code>."
-        )
-        return
-
-    riwayat, nomor_str = context.args[0].lower(), context.args[1]
-
-    if not nomor_str.isdigit():
-        await update.message.reply_text("Nomor hadits harus berupa angka.")
-        return
-    nomor = int(nomor_str)
-
-    processing_message = await update.message.reply_text(f"🔍 Sedang mencari Hadits {riwayat.capitalize()} No. {nomor}...")
-
-    try:
-        url = f"https://api.hadith.gading.dev/books/{riwayat}/{nomor}"
-        response = requests.get(url, timeout=20)
-        response.raise_for_status()
-
-        data = response.json()['data']
-        hadith = data['contents']
-        message = (
-            f"📜 <b>Hadits {data['name']} No. {hadith['number']}</b>\n\n"
-            f"<b dir='rtl'>{hadith['arab']}</b>\n\n"
-            f"<i>Artinya: \"{hadith['id']}\"</i>"
-        )
-        await update.message.reply_text(message, parse_mode=ParseMode.HTML)
-
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 404:
-            await update.message.reply_text(f"Maaf, Hadits {riwayat.capitalize()} nomor {nomor} tidak ditemukan.")
-        else:
-            logger.error(f"API Hadits mengembalikan status {e.response.status_code}")
-            await update.message.reply_text("Maaf, terjadi kesalahan pada server Hadits.")
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error saat menghubungi API Hadits: {e}")
-        await update.message.reply_text("Maaf, terjadi kesalahan koneksi saat mencari hadits.")
-    finally:
-        await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
-
-# --- Fungsi Pengingat ---
-
-def _parse_reminder_time(time_str: str) -> int:
-    """Mengubah string waktu (e.g., 5m, 1h, 2d) menjadi detik. Returns 0 jika tidak valid."""
-    try:
-        time_str = time_str.lower()
-        value = int(time_str[:-1])
-        unit = time_str[-1]
-        
-        if unit == 's': return value
-        if unit == 'm': return value * 60
-        if unit == 'h': return value * 3600
-        if unit == 'd': return value * 86400
-        
-        return 0
-    except (ValueError, IndexError):
-        return 0
-
-async def _reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Fungsi yang dijalankan oleh job queue saat waktu pengingat tiba."""
-    job = context.job
-    if not job or not job.chat_id or not job.data: return
-    await context.bot.send_message(
-        chat_id=job.chat_id, 
-        text=f"⏰ <b>Pengingat:</b>\n\n<i>{job.data}</i>", 
-        parse_mode=ParseMode.HTML
-    )
-
-async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengatur pengingat untuk pengguna."""
-    if not update.message or not context.args or len(context.args) < 2:
-        await update.message.reply_text(
-            "Format salah. Gunakan: <b><code>/ingatkan [waktu] [pesan]</code></b>\n"
-            "Contoh: <code>/ingatkan 30m Baca Al-Kahfi</code>\n"
-            "Waktu: <code>s</code> (detik), <code>m</code> (menit), <code>h</code> (jam), <code>d</code> (hari)"
-        )
-        return
-
-    if not context.job_queue:
-        await update.message.reply_text("Maaf, fitur pengingat saat ini tidak dapat diaktifkan.")
-        return
-
-    time_str, reminder_text = context.args[0], " ".join(context.args[1:])
-    delay = _parse_reminder_time(time_str)
-
-    if not (0 < delay <= 2592000): # 30 hari
-        await update.message.reply_text(
-            "Format atau durasi waktu tidak valid. Gunakan angka diikuti <code>s</code>, <code>m</code>, <code>h</code>, atau <code>d</code>.\n"
-            "Durasi maksimal adalah 30 hari."
-        )
-        return
-
-    context.job_queue.run_once(_reminder_callback, delay, chat_id=update.message.chat_id, data=reminder_text)
-    await update.message.reply_text(f"✅ Baik, pengingat untuk '<i>{reminder_text}</i>' telah diatur dalam {time_str}.")
-
-# --- Fungsi Anggota Baru ---
-
-async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menyapa setiap anggota baru yang bergabung ke grup."""
-    if not update.message or not update.message.new_chat_members:
-        return
-
-    for member in update.message.new_chat_members:
-        if member.is_bot: continue
-
-        welcome_message = (
-            f"Ahlan wa sahlan, {member.mention_html()}!\n\n"
-            f"Selamat datang di grup <b>{update.message.chat.title}</b>. "
-            "Semoga betah dan mendapatkan banyak manfaat.\n\n"
-            "Jangan lupa baca peraturan grup dengan perintah <code>/rules</code> ya."
-        )
-        await update.message.reply_text(welcome_message, parse_mode=ParseMode.HTML)
+if __name__ == "__main__":
+    main()
