@@ -2,12 +2,13 @@
 
 """
 Modul ini berisi semua fungsi dasar yang dipanggil oleh pengguna melalui perintah.
-Termasuk fitur Asmaul Husna yang baru.
+Termasuk fitur Mutiara Kata Islami yang baru.
 """
 
 import logging
 import requests 
 import random
+import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram.constants import ParseMode
@@ -23,12 +24,23 @@ logger = logging.getLogger(__name__)
 # State untuk ConversationHandler (untuk fitur /settings)
 (SELECTING_ACTION, AWAITING_WELCOME_MESSAGE, AWAITING_RULES) = range(3)
 
+# --- Daftar Mutiara Kata Islami ---
+# Data disimpan di sini agar tidak bergantung pada API eksternal
+ISLAMIC_QUOTES = [
+    {"author": "Imam Al-Ghazali", "quote": "Kebahagiaan terletak pada kemenangan memerangi hawa nafsu dan menahan kehendak yang berlebih-lebihan."},
+    {"author": "Imam Syafi'i", "quote": "Ilmu itu bukan yang dihafal, tetapi yang memberi manfaat."},
+    {"author": "Umar bin Khattab", "quote": "Aku tidak pernah mengkhawatirkan apakah doaku akan dikabulkan atau tidak, tapi yang lebih aku khawatirkan adalah aku tidak diberi hidayah untuk terus berdoa."},
+    {"author": "Ali bin Abi Thalib", "quote": "Jangan menjelaskan tentang dirimu kepada siapa pun, karena yang menyukaimu tidak butuh itu dan yang membencimu tidak percaya itu."},
+    {"author": "Hasan Al-Bashri", "quote": "Dunia ini hanya tiga hari: Kemarin, ia telah pergi bersama dengan semua isinya. Besok, engkau mungkin tak akan pernah menemuinya. Hari ini, itulah yang kau punya, maka beramallah di hari ini."},
+    {"author": "Ibnu Qayyim Al-Jauziyyah", "quote": "Jika Allah memberimu nikmat, Dia ingin melihat jejak nikmat-Nya ada padamu."},
+    {"author": "Imam Al-Ghazali", "quote": "Cintailah kekasihmu sekadarnya saja, siapa tahu nanti akan jadi musuhmu. Dan bencilah musuhmu sekadarnya saja, siapa tahu nanti akan jadi kekasihmu."},
+    {"author": "Ali bin Abi Thalib", "quote": "Kesabaran itu ada dua macam: sabar atas sesuatu yang tidak kau ingin dan sabar menahan diri dari sesuatu yang kau ingini."}
+]
+
 # --- Fungsi Perintah Dasar ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengirim pesan sambutan saat pengguna memulai interaksi dengan bot."""
-    if not update.message or not update.message.from_user:
-        return
+    if not update.message or not update.message.from_user: return
     user_name = update.message.from_user.first_name
     welcome_message = (
         f"Assalamu'alaikum, {user_name}!\n\n"
@@ -48,7 +60,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b><code>/settings</code></b> - (Admin) Mengatur bot untuk grup ini\n"
         "<b><code>/statistic</code></b> - Menampilkan statistik grup\n"
         "<b><code>/doa</code></b> - Menampilkan doa harian acak\n"
-        "<b><code>/asmaulhusna</code></b> - Menampilkan Asmaul Husna acak\n\n"
+        "<b><code>/mutiarakata</code></b> - Mutiara kata dari para ulama\n\n"
         "<b>Fitur Islami & AI:</b>\n"
         "<b><code>/tanya [pertanyaan]</code></b> - Tanya jawab Islami\n"
         "<b><code>/kisah [nama]</code></b> - Kisah Nabi/Sahabat\n"
@@ -61,14 +73,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menampilkan peraturan grup yang telah ditetapkan dari database."""
     if not update.message: return
     chat_id = update.message.chat_id
     rules_text = db_handler.get_group_setting(chat_id, 'rules_text', db_handler.get_default_rules())
     await update.message.reply_text(rules_text, parse_mode=ParseMode.HTML)
 
 async def statistic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menampilkan statistik dasar untuk grup."""
     if not update.message or update.message.chat.type not in ['group', 'supergroup']:
         await update.message.reply_text("Perintah ini hanya dapat digunakan di dalam grup.")
         return
@@ -86,7 +96,6 @@ async def statistic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Maaf, terjadi kesalahan saat mengambil data statistik.")
 
 async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengambil dan mengirim doa harian acak."""
     if not update.message: return
     processing_message = await update.message.reply_text("🤲 Sedang mencari doa harian...")
     try:
@@ -111,37 +120,22 @@ async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     finally:
         await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
 
-# --- REVISI: Menggunakan API baru yang lebih stabil untuk Asmaul Husna ---
-async def asmaulhusna_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengambil dan mengirim salah satu Asmaul Husna secara acak."""
+# --- FITUR BARU: Mutiara Kata Islami ---
+async def mutiarakata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Mengirim sebuah mutiara kata Islami secara acak."""
     if not update.message: return
 
-    processing_message = await update.message.reply_text("📖 Sedang mencari nama terindah...")
-    try:
-        # API baru dari file JSON mentah di GitHub, sangat stabil.
-        url = "https://raw.githubusercontent.com/Penggguna/QuranJSON/main/asmaul-husna.json"
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        asmaul_husna_list = response.json()
-        
-        # Validasi data dari API baru
-        if not isinstance(asmaul_husna_list, list) or not asmaul_husna_list:
-            raise ValueError("API mengembalikan format data yang tidak valid atau daftar kosong.")
-        
-        nama = random.choice(asmaul_husna_list)
-        message_text = (
-            f"✨ <b>Asmaul Husna</b> ✨\n\n"
-            # Menyesuaikan dengan kunci JSON yang baru: 'latin' dan 'arti_id'
-            f"<b>{nama.get('urutan', '')}. {nama.get('latin', 'N/A')}</b> (<i>{nama.get('arab', '')}</i>)\n\n"
-            f"<b>Artinya:</b>\n"
-            f"{nama.get('arti_id', 'Tidak ada arti.')}"
-        )
-        await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
-    except (requests.exceptions.RequestException, ValueError, json.JSONDecodeError) as e:
-        logger.error(f"Error saat menghubungi API Asmaul Husna: {e}")
-        await update.message.reply_text("Maaf, terjadi kesalahan saat mencari Asmaul Husna. Coba lagi nanti.")
-    finally:
-        await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
+    quote_data = random.choice(ISLAMIC_QUOTES)
+    
+    message_text = (
+        f"✨ <b>Mutiara Kata</b> ✨\n\n"
+        f"<i>\"{quote_data['quote']}\"</i>\n\n"
+        f"<b>— {quote_data['author']}</b>"
+    )
+    await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
+
+# ... (Sisa kode untuk tanya_ai, kisah, hadith, reminder, greet_new_member, dan settings tetap sama)
+# Pastikan semua fungsi lainnya tetap ada di sini.
 
 async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message: return
@@ -243,7 +237,6 @@ async def hadith_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
 
 def _parse_reminder_time(time_str: str) -> int:
-    """Mengubah string waktu (e.g., 5m, 1h, 2d) menjadi detik. Returns 0 jika tidak valid."""
     try:
         time_str = time_str.lower()
         value = int(time_str[:-1])
@@ -259,7 +252,6 @@ def _parse_reminder_time(time_str: str) -> int:
         return 0
 
 async def _reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Fungsi yang dijalankan oleh job queue saat waktu pengingat tiba."""
     job = context.job
     if not job or not job.chat_id or not job.data: return
     await context.bot.send_message(
@@ -269,7 +261,6 @@ async def _reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengatur pengingat untuk pengguna."""
     if not update.message or not context.args or len(context.args) < 2:
         await update.message.reply_text(
             "Format salah. Gunakan: <b><code>/ingatkan [waktu] [pesan]</code></b>\n"
@@ -297,7 +288,6 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Menyapa setiap anggota baru yang bergabung ke grup."""
     if not update.message or not update.message.new_chat_members:
         return
 
@@ -317,10 +307,7 @@ async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         await update.message.reply_text(message_to_send, parse_mode=ParseMode.HTML)
 
-# --- FITUR PENGATURAN GRUP (/settings) ---
-
 async def is_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Memeriksa apakah pengguna yang mengirim perintah adalah admin."""
     if not update.effective_chat or not update.effective_user:
         return False
     if update.effective_chat.type == 'private':
@@ -335,7 +322,6 @@ async def is_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
         return False
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Memulai alur percakapan untuk pengaturan grup."""
     if not update.message or not await is_user_admin(update, context):
         await update.message.reply_text("Perintah ini hanya untuk admin grup.")
         return ConversationHandler.END
@@ -358,7 +344,6 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return SELECTING_ACTION
 
 async def settings_button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Menangani semua tombol yang ditekan dari menu /settings."""
     query = update.callback_query
     await query.answer()
     
@@ -380,7 +365,6 @@ async def settings_button_callback(update: Update, context: ContextTypes.DEFAULT
     elif action == 'toggle_welcome':
         current_status = db_handler.get_group_setting(chat_id, 'welcome_enabled', True)
         db_handler.set_group_setting(chat_id, 'welcome_enabled', not current_status)
-        # Perbarui keyboard untuk menampilkan status baru
         welcome_status = "✅ Aktif" if not current_status else "❌ Nonaktif"
         moderation_status = "✅ Aktif" if db_handler.get_group_setting(chat_id, 'ai_moderation_enabled', True) else "❌ Nonaktif"
         keyboard = [
@@ -394,11 +378,9 @@ async def settings_button_callback(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text("Pengaturan sapaan anggota baru telah diperbarui.", reply_markup=reply_markup)
         return SELECTING_ACTION
 
-
     elif action == 'toggle_moderation':
         current_status = db_handler.get_group_setting(chat_id, 'ai_moderation_enabled', True)
         db_handler.set_group_setting(chat_id, 'ai_moderation_enabled', not current_status)
-        # Perbarui keyboard untuk menampilkan status baru
         welcome_status = "✅ Aktif" if db_handler.get_group_setting(chat_id, 'welcome_enabled', True) else "❌ Nonaktif"
         moderation_status = "✅ Aktif" if not current_status else "❌ Nonaktif"
         keyboard = [
@@ -412,7 +394,6 @@ async def settings_button_callback(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text("Pengaturan moderasi AI telah diperbarui.", reply_markup=reply_markup)
         return SELECTING_ACTION
 
-
     elif action == 'close_settings':
         await query.edit_message_text("Menu pengaturan ditutup.")
         return ConversationHandler.END
@@ -420,26 +401,23 @@ async def settings_button_callback(update: Update, context: ContextTypes.DEFAULT
     return SELECTING_ACTION
 
 async def save_welcome_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Menyimpan pesan selamat datang yang baru dari pengguna."""
     if not update.message or not update.message.text:
         return AWAITING_WELCOME_MESSAGE
         
     db_handler.set_group_setting(update.effective_chat.id, 'welcome_message', update.message.text_html)
     await update.message.reply_text("✅ Pesan selamat datang berhasil diperbarui. Kembali ke menu pengaturan...")
-    await settings_command(update, context) # Kembali ke menu utama
+    await settings_command(update, context)
     return ConversationHandler.END
 
 async def save_rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Menyimpan peraturan baru dari pengguna."""
     if not update.message or not update.message.text:
         return AWAITING_RULES
         
     db_handler.set_group_setting(update.effective_chat.id, 'rules_text', update.message.text_html)
     await update.message.reply_text("✅ Peraturan grup berhasil diperbarui. Kembali ke menu pengaturan...")
-    await settings_command(update, context) # Kembali ke menu utama
+    await settings_command(update, context)
     return ConversationHandler.END
 
 async def cancel_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Membatalkan alur percakapan pengaturan."""
     await update.message.reply_text("Aksi dibatalkan. Menu pengaturan ditutup.")
     return ConversationHandler.END
