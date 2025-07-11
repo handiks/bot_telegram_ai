@@ -41,22 +41,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Menampilkan daftar semua perintah yang tersedia."""
     if not update.message: return
-    # REVISI: Teks bantuan diubah ke format HTML untuk styling command dan deskripsinya.
+    # REVISI: Tag <code> kini hanya membungkus perintah untuk membedakan warnanya.
     help_text = (
         "📖 <b>Daftar Perintah Bot</b>\n\n"
-        "<code>/start - Memulai bot</code>\n"
-        "<code>/help - Menampilkan pesan bantuan ini</code>\n"
-        "<code>/rules - Menampilkan peraturan grup</code>\n"
-        "<code>/statistic - Menampilkan statistik grup</code>\n"
-        "<code>/doa - Menampilkan doa harian acak</code>\n\n"
+        "<code>/start</code> - Memulai bot\n"
+        "<code>/help</code> - Menampilkan pesan bantuan ini\n"
+        "<code>/rules</code> - Menampilkan peraturan grup\n"
+        "<code>/statistic</code> - Menampilkan statistik grup\n"
+        "<code>/doa</code> - Menampilkan doa harian acak\n\n"
         "<b>Fitur Islami & AI:</b>\n"
-        "<code>/tanya [pertanyaan] - Tanya jawab Islami</code>\n"
-        "<code>/kisah [nama] - Kisah Nabi/Sahabat</code>\n"
-        "<code>/ayat [surah]:[ayat] - Mengirim ayat Al-Qur'an</code>\n"
-        "<code>/tafsir [surah]:[ayat] - Menampilkan tafsir ayat</code>\n"
-        "<code>/hadits [riwayat] [nomor] - Mencari hadits</code>\n\n"
+        "<code>/tanya [pertanyaan]</code> - Tanya jawab Islami\n"
+        "<code>/kisah [nama]</code> - Kisah Nabi/Sahabat\n"
+        "<code>/ayat [surah]:[ayat]</code> - Mengirim ayat Al-Qur'an\n"
+        "<code>/tafsir [surah]:[ayat]</code> - Menampilkan tafsir ayat\n"
+        "<code>/hadits [riwayat] [nomor]</code> - Mencari hadits\n\n"
         "<b>Utilitas:</b>\n"
-        "<code>/ingatkan [waktu] [pesan] - Mengatur pengingat</code>"
+        "<code>/ingatkan [waktu] [pesan]</code> - Mengatur pengingat"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
