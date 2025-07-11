@@ -90,6 +90,19 @@ async def deactivate_bot(context: ContextTypes.DEFAULT_TYPE) -> None:
         except Exception as e:
             logger.warning(f"Gagal mengirim notifikasi nonaktif ke developer: {e}")
 
+# --- Perintah Khusus Developer ---
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Perintah khusus untuk developer memeriksa status bot."""
+    if not update.effective_user or str(update.effective_user.id) != DEVELOPER_CHAT_ID:
+        return  # Abaikan jika bukan developer
+
+    is_active = context.bot_data.get('is_active', False)
+    status_text = (
+        f"<b>Bot Status Check</b>\n\n"
+        f"<b>Status:</b> {'✅ Aktif' if is_active else '🌙 Tidur'}\n"
+        f"<b>Waktu Server (WIB):</b> {datetime.datetime.now(wib).strftime('%Y-%m-%d %H:%M:%S')}"
+    )
+    await update.message.reply_text(status_text)
 
 # --- Bagian Server Keep-Alive ---
 class KeepAliveHandler(BaseHTTPRequestHandler):
@@ -155,35 +168,29 @@ def main() -> None:
 
     # --- Atur Status Awal & Jadwal Aktivitas ---
     now_wib = datetime.datetime.now(wib)
-    # Aktif dari jam 7:00 hingga 23:59 WIB. Jam 00:00 adalah jam 12 malam.
     is_currently_active = 7 <= now_wib.hour < 24
     application.bot_data['is_active'] = is_currently_active
     logger.info(f"Inisialisasi bot. Status aktif awal: {is_currently_active}")
 
     if application.job_queue:
-        # Nonaktifkan pada tengah malam (00:00 WIB)
         application.job_queue.run_daily(deactivate_bot, time=datetime.time(hour=0, minute=0, tzinfo=wib), name="deactivate_bot")
-        # Aktifkan pada jam 7 pagi (07:00 WIB)
         application.job_queue.run_daily(activate_bot, time=datetime.time(hour=7, minute=0, tzinfo=wib), name="activate_bot")
         logger.info("Jadwal aktivasi (07:00 WIB) dan deaktivasi (00:00 WIB) telah diatur.")
     
-    # Jadwalkan pengiriman ayat harian (hanya akan terkirim jika bot sedang aktif)
     if TARGET_GROUP_ID and application.job_queue:
-        time_morning = datetime.time(hour=5, minute=0, tzinfo=wib) # Ini akan diabaikan karena di luar jam aktif
-        application.job_queue.run_daily(send_daily_verse, time_morning, name="daily_morning_verse")
         time_afternoon = datetime.time(hour=16, minute=0, tzinfo=wib)
         application.job_queue.run_daily(send_daily_verse, time_afternoon, name="daily_afternoon_verse")
-        logger.info(f"Jadwal pengiriman ayat harian telah diatur.")
+        logger.info(f"Jadwal pengiriman ayat harian sore telah diatur.")
 
-    # Buat instance filter aktivitas
     is_active_filter = IsActiveFilter()
-
-    # Daftarkan handler error
     application.add_error_handler(error_handler)
 
-    # --- Pendaftaran Handler dengan Filter Aktivitas ---
-    # Semua perintah dan pesan sekarang akan melewati `is_active_filter` terlebih dahulu.
-    # Jika bot tidak aktif, handler tidak akan dijalankan.
+    # --- Pendaftaran Handler ---
+    # Perintah khusus developer (tanpa filter aktif)
+    if DEVELOPER_CHAT_ID:
+        application.add_handler(CommandHandler("status", status_command))
+
+    # Perintah dan pesan untuk pengguna (dengan filter aktif)
     application.add_handler(CommandHandler("start", start, filters=is_active_filter))
     application.add_handler(CommandHandler("help", help_command, filters=is_active_filter))
     application.add_handler(CommandHandler("rules", rules, filters=is_active_filter))
@@ -202,7 +209,6 @@ def main() -> None:
 
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS & is_active_filter, greet_new_member))
 
-    # Mulai bot
     logger.info("Bot mulai berjalan...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
