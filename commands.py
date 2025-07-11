@@ -300,7 +300,7 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
-    context.job_queue.run_once(_reminder_callback, delay, chat_id=update.message.chat_id, data=reminder_text)
+    context.job_queue.run_once(_reminder_callback, delay, chat_id=update.message.chat.id, data=reminder_text)
     await update.message.reply_text(f"✅ Baik, pengingat untuk '<i>{reminder_text}</i>' telah diatur dalam {time_str}.")
 
 # --- Fungsi Anggota Baru ---
