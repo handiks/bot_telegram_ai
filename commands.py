@@ -246,7 +246,7 @@ async def hadith_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.error(f"Error saat menghubungi API Hadits: {e}")
         await update.message.reply_text("Maaf, terjadi kesalahan koneksi saat mencari hadits.")
     finally:
-        await context.bot.delete_message(chat_id=update.message.chat_id, message_id=processing_message.message_id)
+        await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
 
 # --- Fungsi Pengingat ---
 
@@ -282,4 +282,41 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(
             "Format salah. Gunakan: <b><code>/ingatkan [waktu] [pesan]</code></b>\n"
             "Contoh: <code>/ingatkan 30m Baca Al-Kahfi</code>\n"
-            "Waktu: <code>s</code> (detik), <code>m</code> (menit), <code>h</code> (ja
+            "Waktu: <code>s</code> (detik), <code>m</code> (menit), <code>h</code> (jam), <code>d</code> (hari)"
+        )
+        return
+
+    if not context.job_queue:
+        await update.message.reply_text("Maaf, fitur pengingat saat ini tidak dapat diaktifkan.")
+        return
+
+    time_str, reminder_text = context.args[0], " ".join(context.args[1:])
+    delay = _parse_reminder_time(time_str)
+
+    if not (0 < delay <= 2592000): # 30 hari
+        await update.message.reply_text(
+            "Format atau durasi waktu tidak valid. Gunakan angka diikuti <code>s</code>, <code>m</code>, <code>h</code>, atau <code>d</code>.\n"
+            "Durasi maksimal adalah 30 hari."
+        )
+        return
+
+    context.job_queue.run_once(_reminder_callback, delay, chat_id=update.message.chat_id, data=reminder_text)
+    await update.message.reply_text(f"✅ Baik, pengingat untuk '<i>{reminder_text}</i>' telah diatur dalam {time_str}.")
+
+# --- Fungsi Anggota Baru ---
+
+async def greet_new_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Menyapa setiap anggota baru yang bergabung ke grup."""
+    if not update.message or not update.message.new_chat_members:
+        return
+
+    for member in update.message.new_chat_members:
+        if member.is_bot: continue
+
+        welcome_message = (
+            f"Ahlan wa sahlan, {member.mention_html()}!\n\n"
+            f"Selamat datang di grup <b>{update.message.chat.title}</b>. "
+            "Semoga betah dan mendapatkan banyak manfaat.\n\n"
+            "Jangan lupa baca peraturan grup dengan perintah <code>/rules</code> ya."
+        )
+        await update.message.reply_text(welcome_message, parse_mode=ParseMode.HTML)
