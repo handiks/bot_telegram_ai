@@ -111,36 +111,33 @@ async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     finally:
         await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
 
-# --- REVISI: Menggunakan API baru untuk Asmaul Husna ---
+# --- REVISI: Menggunakan API baru yang lebih stabil untuk Asmaul Husna ---
 async def asmaulhusna_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Mengambil dan mengirim salah satu Asmaul Husna secara acak."""
     if not update.message: return
 
     processing_message = await update.message.reply_text("📖 Sedang mencari nama terindah...")
     try:
-        # API baru yang lebih stabil
-        url = "https://islam.nu.or.id/api/v1/asmaul-husna"
+        # API baru dari file JSON mentah di GitHub, sangat stabil.
+        url = "https://raw.githubusercontent.com/Penggguna/QuranJSON/main/asmaul-husna.json"
         response = requests.get(url, timeout=15)
         response.raise_for_status()
-        data = response.json()
+        asmaul_husna_list = response.json()
         
-        # Menyesuaikan dengan struktur data dari API baru
-        if not data or 'data' not in data or not isinstance(data['data'], list):
-            raise ValueError("API mengembalikan format data yang tidak valid.")
-        
-        asmaul_husna_list = data['data']
-        if not asmaul_husna_list:
-            raise ValueError("API mengembalikan daftar kosong.")
+        # Validasi data dari API baru
+        if not isinstance(asmaul_husna_list, list) or not asmaul_husna_list:
+            raise ValueError("API mengembalikan format data yang tidak valid atau daftar kosong.")
         
         nama = random.choice(asmaul_husna_list)
         message_text = (
             f"✨ <b>Asmaul Husna</b> ✨\n\n"
-            f"<b>{nama.get('urutan', '')}. {nama.get('nama', 'N/A')}</b> (<i>{nama.get('arab', '')}</i>)\n\n"
+            # Menyesuaikan dengan kunci JSON yang baru: 'latin' dan 'arti_id'
+            f"<b>{nama.get('urutan', '')}. {nama.get('latin', 'N/A')}</b> (<i>{nama.get('arab', '')}</i>)\n\n"
             f"<b>Artinya:</b>\n"
-            f"{nama.get('arti', 'Tidak ada arti.')}"
+            f"{nama.get('arti_id', 'Tidak ada arti.')}"
         )
         await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
-    except (requests.exceptions.RequestException, ValueError) as e:
+    except (requests.exceptions.RequestException, ValueError, json.JSONDecodeError) as e:
         logger.error(f"Error saat menghubungi API Asmaul Husna: {e}")
         await update.message.reply_text("Maaf, terjadi kesalahan saat mencari Asmaul Husna. Coba lagi nanti.")
     finally:
