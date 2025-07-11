@@ -24,7 +24,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.from_user:
         return
     user_name = update.message.from_user.first_name
-    # REVISI: Pesan sambutan dibuat lebih personal dan informatif.
     welcome_message = (
         f"Assalamu'alaikum, {user_name}!\n\n"
         "Selamat datang di Bot Islami & Manajemen Grup.\n\n"
@@ -41,30 +40,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Menampilkan daftar semua perintah yang tersedia."""
     if not update.message: return
-    # REVISI: Tag <code> kini hanya membungkus perintah untuk membedakan warnanya.
+    # REVISI: Menggunakan kombinasi <b> dan <code> untuk membuat perintah lebih menonjol.
     help_text = (
         "📖 <b>Daftar Perintah Bot</b>\n\n"
-        "<code>/start</code> - Memulai bot\n"
-        "<code>/help</code> - Menampilkan pesan bantuan ini\n"
-        "<code>/rules</code> - Menampilkan peraturan grup\n"
-        "<code>/statistic</code> - Menampilkan statistik grup\n"
-        "<code>/doa</code> - Menampilkan doa harian acak\n\n"
+        "<b><code>/start</code></b> - Memulai bot\n"
+        "<b><code>/help</code></b> - Menampilkan pesan bantuan ini\n"
+        "<b><code>/rules</code></b> - Menampilkan peraturan grup\n"
+        "<b><code>/statistic</code></b> - Menampilkan statistik grup\n"
+        "<b><code>/doa</code></b> - Menampilkan doa harian acak\n\n"
         "<b>Fitur Islami & AI:</b>\n"
-        "<code>/tanya [pertanyaan]</code> - Tanya jawab Islami\n"
-        "<code>/kisah [nama]</code> - Kisah Nabi/Sahabat\n"
-        "<code>/ayat [surah]:[ayat]</code> - Mengirim ayat Al-Qur'an\n"
-        "<code>/tafsir [surah]:[ayat]</code> - Menampilkan tafsir ayat\n"
-        "<code>/hadits [riwayat] [nomor]</code> - Mencari hadits\n\n"
+        "<b><code>/tanya [pertanyaan]</code></b> - Tanya jawab Islami\n"
+        "<b><code>/kisah [nama]</code></b> - Kisah Nabi/Sahabat\n"
+        "<b><code>/ayat [surah]:[ayat]</code></b> - Mengirim ayat Al-Qur'an\n"
+        "<b><code>/tafsir [surah]:[ayat]</code></b> - Menampilkan tafsir ayat\n"
+        "<b><code>/hadits [riwayat] [nomor]</code></b> - Mencari hadits\n\n"
         "<b>Utilitas:</b>\n"
-        "<code>/ingatkan [waktu] [pesan]</code> - Mengatur pengingat"
+        "<b><code>/ingatkan [waktu] [pesan]</code></b> - Mengatur pengingat"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Menampilkan peraturan grup yang telah ditetapkan."""
     if not update.message: return
-    # SARAN: Peraturan ini bisa dipindahkan ke file konfigurasi atau database
-    # agar mudah diubah tanpa mengubah kode.
     rules_text = (
         "📜 <b>Peraturan Grup</b>\n\n"
         "1. Jaga adab dan gunakan bahasa yang sopan.\n"
@@ -106,7 +103,7 @@ async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         url = "https://doa-doa-api-ahmadramadhan.fly.dev/api"
         response = requests.get(url, timeout=15)
-        response.raise_for_status() # Cek status HTTP
+        response.raise_for_status()
         
         doa_list = response.json()
         if not isinstance(doa_list, list) or not doa_list:
@@ -126,7 +123,6 @@ async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.error(f"Error saat menghubungi API Doa Harian: {e}")
         await update.message.reply_text("Maaf, terjadi kesalahan saat mencari doa harian. Coba lagi nanti.")
     finally:
-        # REVISI: Memastikan pesan "loading" selalu dihapus.
         await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
 
 # --- Fungsi AI ---
@@ -141,7 +137,7 @@ async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if not context.args:
         await update.message.reply_text(
-            "Gunakan format: <code>/tanya [pertanyaan Anda]</code>\n"
+            "Gunakan format: <b><code>/tanya [pertanyaan Anda]</code></b>\n"
             "Contoh: <code>/tanya Apa itu istidraj?</code>"
         )
         return
@@ -149,7 +145,6 @@ async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     question = " ".join(context.args)
     processing_message = await update.message.reply_text("🤔 Sedang memproses pertanyaan Anda...")
 
-    # REVISI: Prompt disempurnakan untuk jawaban yang lebih terstruktur dan berdasar.
     prompt = f"""
         Anda adalah seorang asisten AI cendekiawan Muslim.
         Tugas Anda adalah menjawab pertanyaan berikut dengan sopan, jelas, dan terstruktur.
@@ -179,7 +174,7 @@ async def kisah_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if not context.args:
         await update.message.reply_text(
-            "Gunakan format: <code>/kisah [nama tokoh]</code>\n"
+            "Gunakan format: <b><code>/kisah [nama tokoh]</code></b>\n"
             "Contoh: <code>/kisah Nabi Ibrahim AS</code>"
         )
         return
@@ -187,7 +182,6 @@ async def kisah_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     tokoh = " ".join(context.args)
     processing_message = await update.message.reply_text(f"📜 Sedang membuka lembaran kisah {tokoh.title()}...")
 
-    # REVISI: Prompt disempurnakan untuk cerita yang lebih menarik dan berhikmah.
     prompt = f"""
         Anda adalah seorang pencerita (hakawati) yang ahli dalam sejarah Islam.
         Ceritakan kisah dari tokoh berikut: "{tokoh}".
@@ -213,7 +207,7 @@ async def hadith_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Mencari hadits berdasarkan riwayat dan nomor."""
     if not update.message or not context.args or len(context.args) != 2:
         await update.message.reply_text(
-            "Format salah. Gunakan: <code>/hadits [riwayat] [nomor]</code>\n"
+            "Format salah. Gunakan: <b><code>/hadits [riwayat] [nomor]</code></b>\n"
             "Contoh: <code>/hadits muslim 100</code>\n\n"
             "Riwayat tersedia: <code>bukhari</code>, <code>muslim</code>, <code>tirmidzi</code>, <code>nasai</code>, <code>dawud</code>, <code>majah</code>, <code>ahmad</code>."
         )
@@ -268,7 +262,7 @@ def _parse_reminder_time(time_str: str) -> int:
         if unit == 'h': return value * 3600
         if unit == 'd': return value * 86400
         
-        return 0 # Unit tidak valid
+        return 0
     except (ValueError, IndexError):
         return 0
 
@@ -286,7 +280,7 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Mengatur pengingat untuk pengguna."""
     if not update.message or not context.args or len(context.args) < 2:
         await update.message.reply_text(
-            "Format salah. Gunakan: <code>/ingatkan [waktu] [pesan]</code>\n"
+            "Format salah. Gunakan: <b><code>/ingatkan [waktu] [pesan]</code></b>\n"
             "Contoh: <code>/ingatkan 30m Baca Al-Kahfi</code>\n"
             "Waktu: <code>s</code> (detik), <code>m</code> (menit), <code>h</code> (jam), <code>d</code> (hari)"
         )
@@ -299,8 +293,7 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     time_str, reminder_text = context.args[0], " ".join(context.args[1:])
     delay = _parse_reminder_time(time_str)
 
-    # REVISI: Batas waktu yang lebih wajar, misal 30 hari.
-    if not (0 < delay <= 2592000): # 30 hari dalam detik
+    if not (0 < delay <= 2592000): # 30 hari
         await update.message.reply_text(
             "Format atau durasi waktu tidak valid. Gunakan angka diikuti <code>s</code>, <code>m</code>, <code>h</code>, atau <code>d</code>.\n"
             "Durasi maksimal adalah 30 hari."
