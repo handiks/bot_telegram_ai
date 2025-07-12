@@ -2,7 +2,7 @@
 
 """
 Modul ini berisi semua fungsi dasar yang dipanggil oleh pengguna melalui perintah.
-Termasuk fitur moderasi /warn dan /kick.
+Termasuk fitur /id untuk melihat informasi ID.
 """
 
 import logging
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # State untuk ConversationHandler (untuk fitur /settings)
 (SELECTING_ACTION, AWAITING_WELCOME_MESSAGE, AWAITING_RULES) = range(3)
 
-# --- REVISI: Daftar Mutiara Kata Islami diperbanyak ---
+# --- Daftar Mutiara Kata Islami ---
 ISLAMIC_QUOTES = [
     {"author": "Imam Al-Ghazali", "quote": "Kebahagiaan terletak pada kemenangan memerangi hawa nafsu dan menahan kehendak yang berlebih-lebihan."},
     {"author": "Imam Syafi'i", "quote": "Ilmu itu bukan yang dihafal, tetapi yang memberi manfaat."},
@@ -43,58 +43,41 @@ ISLAMIC_QUOTES = [
     {"author": "Utsman bin Affan", "quote": "Cukuplah kematian sebagai penasihat."},
     {"author": "Ali bin Abi Thalib", "quote": "Jangan pernah membuat keputusan dalam kemarahan dan jangan pernah membuat janji dalam kebahagiaan."},
     {"author": "Imam Syafi'i", "quote": "Hati menjadi resah dan gelisah ketika kita terbiasa berandai-andai dalam menyikapi persoalan hidup."},
-    {"author": "Imam Syafi'i", "quote": "Orang yang berilmu mengetahui orang yang bodoh karena dia pernah bodoh. Sedangkan orang yang bodoh tidak mengetahui orang yang berilmu karena dia tidak pernah berilmu."},
-    {"author": "Ali bin Abi Thalib", "quote": "Jadilah seperti bunga yang memberikan keharuman bahkan kepada tangan yang telah menghancurkannya."},
-    {"author": "Hasan Al-Bashri", "quote": "Menjual akhirat untuk mendapatkan dunia adalah kerugian yang sangat besar."}
 ]
-
 
 # --- Fungsi Helper Moderasi ---
 
 async def is_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Memeriksa apakah pengguna yang mengirim perintah adalah admin."""
-    if not update.effective_chat or not update.effective_user:
-        return False
-    if update.effective_chat.type == 'private':
-        return True
+    if not update.effective_chat or not update.effective_user: return False
+    if update.effective_chat.type == 'private': return True
     try:
         member = await context.bot.get_chat_member(update.effective_chat.id, update.effective_user.id)
         return member.status in ['creator', 'administrator']
-    except BadRequest:
-        return False
+    except BadRequest: return False
     except Exception as e:
         logger.error(f"Error saat memeriksa status admin: {e}")
         return False
 
 async def check_admin_and_bot_permissions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Memeriksa apakah pengguna adalah admin dan bot memiliki izin yang diperlukan."""
-    if not update.message or not update.effective_chat or not update.effective_user:
-        return False
-    
+    if not update.message or not update.effective_chat or not update.effective_user: return False
     if not await is_user_admin(update, context):
         await update.message.reply_text("Perintah ini hanya untuk admin grup.")
         return False
-
     bot_member = await context.bot.get_chat_member(update.effective_chat.id, context.bot.id)
     if not bot_member.status == 'administrator' or not bot_member.can_restrict_members:
         await update.message.reply_text("Saya tidak memiliki izin untuk melakukan ini. Jadikan saya admin dengan hak 'Restrict Members'.")
         return False
-        
     return True
 
 # --- Fungsi Peringatan Terpusat ---
 async def issue_warning(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_to_warn, warned_by: str, reason: str = None):
-    """Menangani logika pemberian peringatan, pengiriman pesan, dan pengecekan batas."""
     total_warnings = db_handler.add_user_warning(chat_id, user_to_warn.id)
     warn_limit = db_handler.get_group_setting(chat_id, 'warn_limit', 3)
-
     warning_message = f"⚠️ Pengguna {user_to_warn.mention_html()} telah diberi peringatan oleh {warned_by}.\n"
     if reason:
         warning_message += f"Alasan: <i>{reason}</i>\n"
     warning_message += f"Total peringatan: <b>{total_warnings}/{warn_limit}</b>."
-
     await context.bot.send_message(chat_id, warning_message, parse_mode=ParseMode.HTML)
-
     if total_warnings >= warn_limit:
         try:
             await context.bot.ban_chat_member(chat_id, user_to_warn.id)
@@ -110,12 +93,7 @@ async def issue_warning(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_t
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.from_user: return
     user_name = update.message.from_user.first_name
-    welcome_message = (
-        f"Assalamu'alaikum, {user_name}!\n\n"
-        "Selamat datang di Bot Islami & Manajemen Grup.\n\n"
-        "Ketik <code>/help</code> untuk melihat daftar lengkap perintah."
-    )
-    await update.message.reply_text(welcome_message)
+    await update.message.reply_text(f"Assalamu'alaikum, {user_name}!\n\nKetik <code>/help</code> untuk melihat daftar perintah.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message: return
@@ -124,6 +102,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b><code>/start</code></b> - Memulai bot\n"
         "<b><code>/help</code></b> - Menampilkan pesan bantuan ini\n"
         "<b><code>/rules</code></b> - Menampilkan peraturan grup\n"
+        "<b><code>/id</code></b> - Menampilkan ID Anda dan ID chat\n"
         "<b><code>/settings</code></b> - (Admin) Mengatur bot untuk grup ini\n"
         "<b><code>/statistic</code></b> - Menampilkan statistik grup\n\n"
         "<b>Moderasi (Hanya Admin):</b>\n"
@@ -141,6 +120,24 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
+# --- FITUR BARU: Perintah /id ---
+async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Mengirim pesan dengan ID pengguna dan ID chat."""
+    if not update.effective_user or not update.effective_chat:
+        return
+
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type
+
+    message_text = (
+        f"🆔 <b>Informasi ID</b>\n\n"
+        f"👤 <b>ID Pengguna Anda:</b> <code>{user_id}</code>\n"
+        f"💬 <b>ID Chat Ini ({chat_type}):</b> <code>{chat_id}</code>"
+    )
+
+    await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
+
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message: return
     chat_id = update.message.chat_id
@@ -155,10 +152,7 @@ async def statistic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.message.chat.id
         chat_title = update.message.chat.title
         member_count = await context.bot.get_chat_member_count(chat_id)
-        stats_text = (
-            f"📊 <b>Statistik Grup: {chat_title}</b>\n\n"
-            f"👤 <b>Jumlah Anggota:</b> {member_count}"
-        )
+        stats_text = (f"📊 <b>Statistik Grup: {chat_title}</b>\n\n👤 <b>Jumlah Anggota:</b> {member_count}")
         await update.message.reply_text(stats_text, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error(f"Error saat mengambil statistik grup: {e}")
@@ -171,37 +165,20 @@ async def doa_harian_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         url = "https://doa-doa-api-ahmadramadhan.fly.dev/api"
         response = requests.get(url, timeout=15)
         response.raise_for_status()
-        doa_list = response.json()
-        if not isinstance(doa_list, list) or not doa_list:
-            raise ValueError("API mengembalikan data kosong atau format salah.")
-        doa = random.choice(doa_list)
-        doa_text = (
-            f"🤲 <b>{doa['doa']}</b>\n\n"
-            f"<b dir='rtl'>{doa['ayat']}</b>\n\n"
-            f"<i>{doa['latin']}</i>\n\n"
-            f"<b>Artinya:</b>\n"
-            f"\"{doa['artinya']}\""
-        )
+        doa = random.choice(response.json())
+        doa_text = (f"🤲 <b>{doa['doa']}</b>\n\n<b dir='rtl'>{doa['ayat']}</b>\n\n<i>{doa['latin']}</i>\n\n<b>Artinya:</b>\n\"{doa['artinya']}\"")
         await update.message.reply_text(doa_text, parse_mode=ParseMode.HTML)
     except (requests.exceptions.RequestException, ValueError) as e:
         logger.error(f"Error saat menghubungi API Doa Harian: {e}")
-        await update.message.reply_text("Maaf, terjadi kesalahan saat mencari doa harian. Coba lagi nanti.")
+        await update.message.reply_text("Maaf, terjadi kesalahan saat mencari doa harian.")
     finally:
         await context.bot.delete_message(chat_id=update.message.chat.id, message_id=processing_message.message_id)
 
 async def mutiarakata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Mengirim sebuah mutiara kata Islami secara acak."""
     if not update.message: return
-    
     quote_data = random.choice(ISLAMIC_QUOTES)
-    
-    message_text = (
-        f"✨ <b>Mutiara Kata</b> ✨\n\n"
-        f"<i>\"{quote_data['quote']}\"</i>\n\n"
-        f"<b>— {quote_data['author']}</b>"
-    )
+    message_text = (f"✨ <b>Mutiara Kata</b> ✨\n\n<i>\"{quote_data['quote']}\"</i>\n\n<b>— {quote_data['author']}</b>")
     await update.message.reply_text(message_text, parse_mode=ParseMode.HTML)
-
 
 async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message: return
@@ -213,12 +190,7 @@ async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     question = " ".join(context.args)
     processing_message = await update.message.reply_text("🤔 Sedang memproses pertanyaan Anda...")
-    prompt = f"""
-        Anda adalah seorang asisten AI cendekiawan Muslim.
-        Tugas Anda adalah menjawab pertanyaan berikut dengan sopan, jelas, dan terstruktur.
-        Prioritaskan jawaban berdasarkan Al-Qur'an dan Hadits shahih.
-        Pertanyaan: "{question}"
-    """
+    prompt = f'Anda adalah seorang asisten AI cendekiawan Muslim. Jawab pertanyaan berikut dengan sopan, jelas, dan berdasarkan Al-Qur\'an dan Hadits shahih. Pertanyaan: "{question}"'
     try:
         response = await gemini_model.generate_content_async(prompt)
         await update.message.reply_text(response.text.strip())
@@ -238,12 +210,7 @@ async def kisah_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     tokoh = " ".join(context.args)
     processing_message = await update.message.reply_text(f"📜 Sedang membuka lembaran kisah {tokoh.title()}...")
-    prompt = f"""
-        Anda adalah seorang pencerita (hakawati) yang ahli dalam sejarah Islam.
-        Ceritakan kisah dari tokoh berikut: "{tokoh}".
-        Gunakan gaya bahasa yang menarik dan mudah dipahami.
-        Fokus pada hikmah yang bisa diambil dari kisah tersebut.
-    """
+    prompt = f'Anda adalah seorang pencerita (hakawati) yang ahli dalam sejarah Islam. Ceritakan kisah dari tokoh berikut: "{tokoh}". Fokus pada hikmah yang bisa diambil.'
     try:
         response = await gemini_model.generate_content_async(prompt)
         await update.message.reply_text(response.text.strip())
@@ -269,11 +236,7 @@ async def hadith_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         response.raise_for_status()
         data = response.json()['data']
         hadith = data['contents']
-        message = (
-            f"📜 <b>Hadits {data['name']} No. {hadith['number']}</b>\n\n"
-            f"<b dir='rtl'>{hadith['arab']}</b>\n\n"
-            f"<i>Artinya: \"{hadith['id']}\"</i>"
-        )
+        message = (f"📜 <b>Hadits {data['name']} No. {hadith['number']}</b>\n\n<b dir='rtl'>{hadith['arab']}</b>\n\n<i>Artinya: \"{hadith['id']}\"</i>")
         await update.message.reply_text(message, parse_mode=ParseMode.HTML)
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
