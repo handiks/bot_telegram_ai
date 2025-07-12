@@ -2,7 +2,7 @@
 
 """
 File utama untuk menjalankan bot Telegram Islami & Manajemen Grup.
-Versi ini berjalan 24/7 dan mendukung fitur moderasi.
+Versi ini berjalan 24/7 dan mendukung fitur moderasi dan /id.
 """
 
 import logging
@@ -14,7 +14,6 @@ import datetime
 from typing import Optional
 
 from telegram import BotCommand, Update, LinkPreviewOptions
-# REVISI: Pastikan 'Application' diimpor dari telegram.ext
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters, ContextTypes,
     Defaults, ConversationHandler, CallbackQueryHandler
@@ -27,7 +26,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Mengimpor semua fungsi dari modul fitur.
 from commands import (
-    start, help_command, rules, statistic, doa_harian_command, mutiarakata_command,
+    start, help_command, rules, statistic, doa_harian_command, mutiarakata_command, id_command,
     tanya_ai_command, kisah_command, hadith_command, set_reminder, 
     greet_new_member,
     # Impor baru untuk moderasi
@@ -99,6 +98,7 @@ async def post_init(application: Application) -> None:
     commands = [
         BotCommand("start", "Memulai bot"),
         BotCommand("help", "Menampilkan bantuan"),
+        BotCommand("id", "Lihat ID Anda & Chat"),
         BotCommand("rules", "Peraturan grup"),
         BotCommand("settings", "(Admin) Atur bot untuk grup ini"),
         BotCommand("warn", "(Admin) Beri peringatan ke anggota"),
@@ -141,6 +141,7 @@ def main() -> None:
     # --- Pendaftaran Handler Lainnya ---
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("id", id_command))
     application.add_handler(CommandHandler("rules", rules))
     application.add_handler(CommandHandler("statistic", statistic))
     application.add_handler(CommandHandler("doa", doa_harian_command))
