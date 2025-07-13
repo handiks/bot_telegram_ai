@@ -17,6 +17,8 @@ from telegram.error import BadRequest
 # Mengimpor model AI dan handler database
 from ai_features import gemini_model
 import db_handler
+# Impor fungsi dari quran_features untuk tes
+from quran_features import send_daily_verse
 
 # Inisialisasi logger
 logger = logging.getLogger(__name__)
@@ -107,7 +109,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b><code>/statistic</code></b> - Menampilkan statistik grup\n\n"
         "<b>Moderasi (Hanya Admin):</b>\n"
         "<b><code>/warn</code></b> - Beri peringatan (balas pesan)\n"
-        "<b><code>/kick</code></b> - Keluarkan anggota (balas pesan)\n\n"
+        "<b><code>/kick</code></b> - Keluarkan anggota (balas pesan)\n"
+        "<b><code>/testayat</code></b> - (Admin) Tes kirim ayat harian\n\n"
         "<b>Fitur Islami & Lainnya:</b>\n"
         "<b><code>/doa</code></b> - Menampilkan doa harian acak\n"
         "<b><code>/mutiarakata</code></b> - Mutiara kata dari para ulama\n"
@@ -315,6 +318,24 @@ async def kick_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         db_handler.clear_user_warnings(chat_id, user_to_kick.id)
     except Exception as e:
         await update.effective_chat.send_message(f"Gagal mengeluarkan {user_to_kick.mention_html()}.")
+
+# --- PERINTAH BARU UNTUK TES ---
+async def test_ayat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """(Admin Only) Memicu fungsi ayat harian untuk pengetesan."""
+    if not await is_user_admin(update, context):
+        await update.message.reply_text("Perintah ini hanya untuk admin.")
+        return
+
+    await update.message.reply_text("⚙️ Menjalankan tes pengiriman ayat harian... Pesan akan dikirim ke grup target jika semua konfigurasi benar.")
+    try:
+        # Memanggil fungsi secara langsung
+        await send_daily_verse(context)
+        await update.message.reply_text("✅ Tes selesai. Silakan periksa grup target.")
+        logger.info(f"Admin '{update.effective_user.full_name}' berhasil memicu pengiriman ayat tes manual.")
+    except Exception as e:
+        logger.error(f"Error saat menjalankan /testayat oleh admin '{update.effective_user.full_name}': {e}")
+        await update.message.reply_text(f"❌ Terjadi kesalahan saat menjalankan tes: {e}")
+
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not update.message or not await is_user_admin(update, context):
