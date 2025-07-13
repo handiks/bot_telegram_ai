@@ -33,7 +33,9 @@ from commands import (
     warn_command, kick_command,
     # Impor untuk settings
     settings_command, settings_button_callback, save_welcome_message, save_rules, cancel_settings,
-    SELECTING_ACTION, AWAITING_WELCOME_MESSAGE, AWAITING_RULES
+    SELECTING_ACTION, AWAITING_WELCOME_MESSAGE, AWAITING_RULES,
+    # Impor baru untuk tes
+    test_ayat_command
 )
 from quran_features import send_verse_command, send_tafsir_command, send_daily_verse
 from ai_features import moderate_chat, gemini_model
@@ -103,6 +105,7 @@ async def post_init(application: Application) -> None:
         BotCommand("settings", "(Admin) Atur bot untuk grup ini"),
         BotCommand("warn", "(Admin) Beri peringatan ke anggota"),
         BotCommand("kick", "(Admin) Keluarkan anggota"),
+        BotCommand("testayat", "(Admin) Tes kirim ayat harian"),
         BotCommand("statistic", "Statistik grup"),
         BotCommand("doa", "Doa harian acak"),
         BotCommand("mutiarakata", "Mutiara kata dari para ulama"),
@@ -152,6 +155,7 @@ def main() -> None:
     application.add_handler(CommandHandler("hadits", hadith_command))
     application.add_handler(CommandHandler("warn", warn_command))
     application.add_handler(CommandHandler("kick", kick_command))
+    application.add_handler(CommandHandler("testayat", test_ayat_command)) # <-- Handler baru
     
     if gemini_model:
         application.add_handler(CommandHandler("tanya", tanya_ai_command))
