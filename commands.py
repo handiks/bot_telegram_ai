@@ -92,10 +92,43 @@ async def issue_warning(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_t
 
 # --- Fungsi Perintah Dasar ---
 
+# --- PERUBAHAN DIMULAI ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message or not update.message.from_user: return
-    user_name = update.message.from_user.first_name
-    await update.message.reply_text(f"Assalamu'alaikum, {user_name}!\n\nKetik <code>/help</code> untuk melihat daftar perintah.")
+    """Menangani perintah /start dan menawarkan untuk menambahkan bot ke grup."""
+    if not update.message or not update.message.from_user or not context.bot:
+        return
+
+    # Hanya tampilkan tombol jika di chat pribadi
+    if update.message.chat.type == 'private':
+        user_name = update.message.from_user.first_name
+        bot_username = context.bot.username
+
+        # Buat URL khusus untuk menambahkan bot ke grup
+        add_to_group_url = f"https://t.me/{bot_username}?startgroup=true"
+
+        # Buat tombol inline
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Tambahkan saya ke Grup Anda", url=add_to_group_url)]
+        ])
+
+        # Buat pesan selamat datang
+        start_message = (
+            f"Assalamu'alaikum, {user_name}!\n\n"
+            "Saya adalah bot Islami yang siap membantu Anda dan grup Anda dengan berbagai fitur bermanfaat. "
+            "Klik tombol di bawah untuk menambahkan saya ke grup.\n\n"
+            "Ketik <code>/help</code> untuk melihat daftar perintah yang tersedia."
+        )
+
+        # Kirim pesan dengan tombol
+        await update.message.reply_text(
+            start_message,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML
+        )
+    else:
+        # Jika /start diketik di grup, berikan respons sederhana
+        await update.message.reply_text("Bot sudah aktif di grup ini. Ketik /help untuk melihat perintah.")
+# --- PERUBAHAN SELESAI ---
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message: return
