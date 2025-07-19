@@ -92,7 +92,6 @@ async def issue_warning(context: ContextTypes.DEFAULT_TYPE, chat_id: int, user_t
 
 # --- Fungsi Perintah Dasar ---
 
-# --- PERUBAHAN DIMULAI ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Menangani perintah /start dan menawarkan untuk menambahkan bot ke grup."""
     if not update.message or not update.message.from_user or not context.bot:
@@ -116,7 +115,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"Assalamu'alaikum, {user_name}!\n\n"
             "Saya adalah bot Islami yang siap membantu Anda dan grup Anda dengan berbagai fitur bermanfaat. "
             "Klik tombol di bawah untuk menambahkan saya ke grup.\n\n"
-            "Ketik <code>/help</code> untuk melihat daftar perintah yang tersedia."
+            "Ketik /help untuk melihat daftar perintah yang tersedia."
         )
 
         # Kirim pesan dengan tombol
@@ -128,33 +127,36 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         # Jika /start diketik di grup, berikan respons sederhana
         await update.message.reply_text("Bot sudah aktif di grup ini. Ketik /help untuk melihat perintah.")
-# --- PERUBAHAN SELESAI ---
 
+# --- PERUBAHAN DIMULAI ---
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message: return
     help_text = (
         "📖 <b>Daftar Perintah Bot</b>\n\n"
-        "<b><code>/start</code></b> - Memulai bot\n"
-        "<b><code>/help</code></b> - Menampilkan pesan bantuan ini\n"
-        "<b><code>/rules</code></b> - Menampilkan peraturan grup\n"
-        "<b><code>/id</code></b> - Menampilkan ID Anda dan ID chat\n"
-        "<b><code>/settings</code></b> - (Admin) Mengatur bot untuk grup ini\n"
-        "<b><code>/statistic</code></b> - Menampilkan statistik grup\n\n"
+        "Klik pada perintah untuk menggunakannya.\n\n"
+        "<b>Umum:</b>\n"
+        "/start - Memulai bot\n"
+        "/help - Menampilkan pesan bantuan ini\n"
+        "/rules - Menampilkan peraturan grup\n"
+        "/id - Menampilkan ID Anda dan ID chat\n"
+        "/statistic - Menampilkan statistik grup\n\n"
         "<b>Moderasi (Hanya Admin):</b>\n"
-        "<b><code>/warn</code></b> - Beri peringatan (balas pesan)\n"
-        "<b><code>/kick</code></b> - Keluarkan anggota (balas pesan)\n"
-        "<b><code>/testayat</code></b> - (Admin) Tes kirim ayat harian\n\n"
+        "/settings - Mengatur bot untuk grup ini\n"
+        "/warn - Memberi peringatan (balas pesan)\n"
+        "/kick - Mengeluarkan anggota (balas pesan)\n"
+        "/testayat - Tes kirim ayat harian\n\n"
         "<b>Fitur Islami & Lainnya:</b>\n"
-        "<b><code>/doa</code></b> - Menampilkan doa harian acak\n"
-        "<b><code>/mutiarakata</code></b> - Mutiara kata dari para ulama\n"
-        "<b><code>/tanya [pertanyaan]</code></b> - Tanya jawab Islami\n"
-        "<b><code>/kisah [nama]</code></b> - Kisah Nabi/Sahabat\n"
-        "<b><code>/ayat [surah]:[ayat]</code></b> - Mengirim ayat Al-Qur'an\n"
-        "<b><code>/tafsir [surah]:[ayat]</code></b> - Menampilkan tafsir ayat\n"
-        "<b><code>/hadits [riwayat] [nomor]</code></b> - Mencari hadits\n"
-        "<b><code>/ingatkan [waktu] [pesan]</code></b> - Mengatur pengingat"
+        "/doa - Menampilkan doa harian acak\n"
+        "/mutiarakata - Mutiara kata dari para ulama\n"
+        "/tanya <code>[pertanyaan]</code> - Tanya jawab Islami\n"
+        "/kisah <code>[nama]</code> - Kisah Nabi/Sahabat\n"
+        "/ayat <code>[surah:ayat]</code> - Mengirim ayat Al-Qur'an\n"
+        "/tafsir <code>[surah:ayat]</code> - Menampilkan tafsir ayat\n"
+        "/hadits <code>[riwayat] [nomor]</code> - Mencari hadits\n"
+        "/ingatkan <code>[waktu] [pesan]</code> - Mengatur pengingat"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
+# --- PERUBAHAN SELESAI ---
 
 # --- FITUR BARU: Perintah /id ---
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -222,7 +224,7 @@ async def tanya_ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("Maaf, fitur AI saat ini tidak tersedia.")
         return
     if not context.args:
-        await update.message.reply_text("Gunakan format: <b><code>/tanya [pertanyaan Anda]</code></b>")
+        await update.message.reply_text("Gunakan format: /tanya <code>[pertanyaan Anda]</code>", parse_mode=ParseMode.HTML)
         return
     question = " ".join(context.args)
     processing_message = await update.message.reply_text("🤔 Sedang memproses pertanyaan Anda...")
@@ -242,7 +244,7 @@ async def kisah_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("Maaf, fitur AI saat ini tidak tersedia.")
         return
     if not context.args:
-        await update.message.reply_text("Gunakan format: <b><code>/kisah [nama tokoh]</code></b>")
+        await update.message.reply_text("Gunakan format: /kisah <code>[nama tokoh]</code>", parse_mode=ParseMode.HTML)
         return
     tokoh = " ".join(context.args)
     processing_message = await update.message.reply_text(f"📜 Sedang membuka lembaran kisah {tokoh.title()}...")
@@ -258,7 +260,7 @@ async def kisah_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def hadith_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or len(context.args) != 2:
-        await update.message.reply_text("Format salah. Gunakan: <b><code>/hadits [riwayat] [nomor]</code></b>")
+        await update.message.reply_text("Format salah. Gunakan: /hadits <code>[riwayat] [nomor]</code>", parse_mode=ParseMode.HTML)
         return
     riwayat, nomor_str = context.args[0].lower(), context.args[1]
     if not nomor_str.isdigit():
@@ -303,7 +305,7 @@ async def _reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or len(context.args) < 2:
-        await update.message.reply_text("Format salah. Gunakan: <b><code>/ingatkan [waktu] [pesan]</code></b>")
+        await update.message.reply_text("Format salah. Gunakan: /ingatkan <code>[waktu] [pesan]</code>", parse_mode=ParseMode.HTML)
         return
     if not context.job_queue:
         await update.message.reply_text("Maaf, fitur pengingat tidak tersedia.")
